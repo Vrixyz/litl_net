@@ -32,15 +32,26 @@ pub struct WebsocketClient {}
 
 impl WebsocketClient {
     pub fn connect(remote_addr: &str) -> Result<Self, std::io::Error> {
-        if let Ok(websocket) = start_websocket(remote_addr) {
-            if let Ok(mut ws) = global_websocket().lock() {
-                if ws.is_none() {
-                    *ws = Some(websocket);
-                    return Ok(Self {});
+        match start_websocket(remote_addr) {
+            Ok(websocket) => {
+                if let Ok(mut ws) = global_websocket().lock() {
+                    if ws.is_none() {
+                        *ws = Some(websocket);
+                        return Ok(Self {});
+                    }
                 }
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::ConnectionAborted,
+                    format!(
+                        "connect to {} succeeded but then internal failure",
+                        remote_addr
+                    ),
+                ));
+            }
+            err => {
+                todo!("connect failure to {}\nerr: {:?}", remote_addr, err);
             }
         }
-        todo!()
     }
 }
 
@@ -60,7 +71,7 @@ impl Communication for WebsocketClient {
                 recv.clear();
                 return Ok(Some(res));
             }
-            Err(_) => todo!(),
+            Err(e) => todo!("receive failure {}", e),
         }
     }
 
@@ -84,11 +95,11 @@ impl Communication for WebsocketClient {
                     }
                 }
                 None => {
-                    todo!()
+                    todo!("no socket at this point ?")
                 }
             },
             Err(_) => {
-                todo!()
+                todo!("cannot lock websocket global")
             }
         }
         Ok(())
@@ -108,7 +119,7 @@ fn start_websocket(remote_addr: &str) -> Result<WebSocket, JsValue> {
             let array = js_sys::Uint8Array::new(&abuf);
             match global_recv_packets().lock() {
                 Ok(mut recv) => recv.push(array.to_vec()),
-                Err(_) => todo!(),
+                Err(e) => todo!("cannot lock recv global ?"),
             }
         } else {
             dbg!("message event, received Unknown: {:?}", e.data());
